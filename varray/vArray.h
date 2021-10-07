@@ -12,6 +12,7 @@
 //				Interface:
 //					- default Constructor: create VArray of size num and initialize its elements with a value, use allocator
 //					  might also reserve additional storage space
+//    ver 0.2       - initializer_list Constructor
 //					- COPY operations
 //					- MOVE operations
 //					- size(): returns the size within the current storage capacity::=capacity()
@@ -23,9 +24,11 @@
 //					- pop_back(): differs from <vector>: erases the last one, BUT returns again true if on empty. If an exception occured
 //                                because of ~T() or initialization of not used storage, etc BUT AGAIN will just re-throw and return false
 //                              AGAIN: possible optimization after Testing - skip the initialization of the NOT-USED storage
-//					- back(): differs from vector<>: doesnot throw; returns T() if empty(), the last element's copy otherwise
+//					- back(): differs from vector<>: doesnot throw; returns T() if empty(), the last element's (MOVABLE) copy otherwise
+//    ver 0.2		- front(): ...                                                              1st ...
 //					- shrink_to_fit(): release the access storage
 //					- [const] T& operator [i] const : throws out_of_range if (i >= size())
+//    ver 0.2		- member type ::iterator -> Random Access Iterators (class iterator_RA<T> defined in "class_RAI.h")
 //
 // 
 //			struct VA_base: private member of VArray: designed for use within VArray:: only
@@ -99,6 +102,7 @@ VA_base<T, A>::operator =(VA_base&& vb) noexcept
 
 // eoclass VA_base
 
+#include "class_RAI.h"			// Defines RandomAccessIterator class
 
 // ------------ class VArray
 template <class T, class A = allocator<T>>
@@ -108,7 +112,13 @@ class VArray {
 		void destroy_elements() ;
 
 	public:
-		explicit VArray (size_t num = 0, const T& val = T(), size_t cap = 0, A a = A()) ;
+		using	iterator = typename iterator_RA<T> ;
+
+		class iterator {} ; 
+	
+	public:
+		explicit VArray (size_t num = 0, const T& val = T(), size_t cap = 0, A a = A()) ;	// default C.
+		explicit VArray (std::initializer_list<T>, A a = A()) ;								// initializer_list C.
 		virtual ~VArray () ;
 
 		VArray(const VArray& va) ;               // Copy C.
@@ -130,17 +140,15 @@ class VArray {
 		bool push_back(T&& val) ;
 
 		T	 back() const noexcept ;
+		T	 front() const noexcept ;
 		bool pop_back() ;
 
 		T&			operator [] (const size_t ind) ;
 		const T&	operator [] (const size_t ind) const ;
 
-		T*       begin() { return(m_base._elems) ; }
-		const T* begin() const { return(m_base._elems) ; }
-		T*       end() { return(m_base._spa) ; }
-		const T* end() const { return(m_base._spa) ; }
-		T*       endlim() { return(m_base._lim) ; }
-		const T* endlim() const { return(m_base._lim) ; }
+		iterator		begin() const { return(static_cast<iterator>(m_base._elems)) ; }
+		iterator		end() const { return(static_cast<iterator>(m_base._spa)) ; }
+		iterator		endlim() const { return(static_cast<iterator>(m_base._lim)) ; }
 
 		template <class T, class A> friend std::ostream& operator << (std::ostream& os, const VArray& ar) ;
 }; // class VArray
@@ -166,11 +174,21 @@ template <class T, class A>
 VArray<T, A>::VArray(size_t num, const T& val, size_t cap, A a) : m_base(a, (cap <= num ? (cap = num + 8) : cap))
 {
 	// in : if (capacity <= num)        cap = num + 8 ; // Magic # 8: size of space to reserve since the beginning
-	m_base._spa = m_base._elems + num ;  // _lim is just where it has to be: next spot after the end
 	cout << endl << "___ VArray (" << num << ", " << val << ")/cap(): " << cap ;
-	std::uninitialized_fill(m_base._elems, m_base._spa, val) ;  // BjarneS: Provides Strong Guarantee
-	std::uninitialized_fill(m_base._spa, m_base._lim, T()) ; // Initialize it with the <empty>
+	try {
+		std::uninitialized_fill(m_base._elems, m_base._elems + num, val) ;    // See VS docs
+		std::uninitialized_fill(m_base._spa, m_base._lim, T()) ;  // Initialize it with the <empty>: For testing mostly
+	} catch (...) { cerr << endl << "___ VArray default: exception thrown. Cleaning done" ; throw ; }
+	m_base._spa = m_base._elems + num ;									      // _lim is just where it has to be: next spot after the end
 } // VArray:: ()
+
+template <class T, class A>
+VArray<T, A>::VArray(std::initializer_list<T> ilist, A a) : m_base(a, ilist.size())
+{
+	m_base._spa = m_base._elems ;
+	for (const auto& i : ilist)		push_back(i) ;
+} // VArray (initializer_list)
+
 
 template <typename In, typename T, typename Out> void
 uini_cpy(In beg, T* end, Out ooo)			// Expected to provide Strong guarantee; (&* is for the intended use of iterators); T()- request using Constructors
@@ -211,13 +229,13 @@ uini_move(In beg, T* end, Out ooo)
 template <typename Out, typename T> void
 uini_chng(Out beg, Out end, const T& val)
 {
-	cout << endl << "__ changing: " ;
+	// cout << endl << "__ changing: " ;
 	Out p = beg ;    // for ERROR handling and Testing: "cout << i << ':'" as well
 	try {
 		for (; beg != end ; ++beg) {
 			// if (beg - p == 4)   throw (CM_error(string("__ testing CM_error"))) ;
 			beg->~T(),
-				cout << (beg - p) << ':',
+				// cout << (beg - p) << ':',
 				new (static_cast<void *>(&*beg)) T ( val ) ;
 		}
 	} catch (...) {
@@ -374,18 +392,12 @@ VArray<T, A>::push_back(T&& val)
 	return(true) ;
 } // VArray push_back(&&)
 
-template <class T, class A> T
-VArray<T, A>::back() const noexcept
-{
-	return(empty() ? T{} : *(m_base._spa - 1)) ;	
-} // Varray back()
-
 template <class T, class A> bool
 VArray<T, A>::pop_back()
 {
 	if (empty())    return(true) ;    // Logic is: did nothing but there is no element anyway
 	try {
-	uini_mval(m_base._spa - 1, move(T{})) ;
+		uini_mval(m_base._spa - 1, move(T {})) ;
 	} catch (...) {
 		cerr << endl << "__ (VArray): pop_back() -> exception -> ..." ;
 		throw ;
@@ -393,6 +405,19 @@ VArray<T, A>::pop_back()
 	(m_base._spa)-- ;
 	return(true) ;
 } // VArray pop_back()
+
+template <class T, class A> T
+VArray<T, A>::back() const noexcept
+{
+	return(empty() ? T{} : *(m_base._spa - 1)) ;	
+} // Varray back()
+
+template <class T, class A> T
+VArray<T, A>::front() const noexcept
+{
+	return(empty() ? T {} : *(m_base._elems)) ;
+} // Varray front()
+
 
 template <class T, class A> inline T&
 VArray<T,A>::operator [](const size_t i)
@@ -410,7 +435,7 @@ VArray<T, A>::operator [](const size_t i) const
 
 
 // FRIENDS follow
-constexpr int ElementsPerRow { 10 } ;     // For the output: ostream:   Might be in CArray but ,,,
+constexpr int ElementsPerRow { 10 } ;     // For the output: ostream:
 constexpr int SpacePerElement { 10 } ;    // ... # of ' '
 
 template <class T, class A> std::ostream&
@@ -419,11 +444,13 @@ operator << (std::ostream& os, const VArray<T, A> & ar)
 	os << "  {used " << ar.size() << " of " << ar.capacity() << '}' << '\n' ;
 	if (ar.size() == 0) { os << "<EMPTY>\n" ; /* return(os) ; */ }
 
-	size_t i = 0 ;
+	size_t i = 0 ; // std::string str{} ;
 	for (auto p = ar.begin() ; p != ar.endlim() ; ++p) {
+		// str = typeid(p).name() ;
 		if (i++ % ElementsPerRow == 0)    os << '\n' ;
-		os << std::setw(SpacePerElement) << *p ; // << (ar.m_base._elems)[i] ; // << '\t' ;
+		os << std::setw(SpacePerElement) << (*p) ; // = -1 ); // << (ar.m_base._elems)[i] ; // << '\t' ;
 	}
+	// cout << endl << "-- typeid iterator {" << str << "}" ;
 	return(os) ;
 } // friend VArray<T,A>::operator << ()
 

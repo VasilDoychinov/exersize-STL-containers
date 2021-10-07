@@ -27,111 +27,61 @@ main()
 {
 	try {
 							constexpr	size_t	num_elements = 10 ;
-							int					temp {} ;
+
+							bool				flOK{false} ;
+							vector<int>			vi{1,2, 3, 4, 5, 6, 7} ;
+
+							VArray<int>::iterator   it ;
+
+							size_t					i {0} ;
+							size_t					num = 0 ;
+							
+
 		cout << endl, show_lapse(true) ;
 
 		// Place the TESTING BLOCK hereafter
-		{	// Open TESTING Block Scope		::   reserve(), resize(), empty(), push_back(), back(), pop()			
-						bool flOK = true ;
+		{
+				cout << endl << "\n-- PREPARING var{1 - 10}:" ;
+			VArray<int>		varr (VArray<int>{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }) ;
+			num = varr.size() ;
 
-				cout << endl << "\n-- PREPARING var{}:" ;
-			VArray<int>					varr {} ;
-				cout << endl << "\n---- result:" << varr ;
-
-				cout << endl << endl << "-- START:  reserve(60) - ", show_lapse(false) ;
+				// cout << endl << "\n---- result:" << varr ;
+				cout << endl << "-- START:  reserve(+50) - ", show_lapse(false) ;
 			flOK = varr.reserve(num_elements + 50) ;
-				cout << endl << "\n---- result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+				cout << endl << "---- result: " << (flOK ? "<OK>> " : "<ERROR>> ") ; // << varr ;
 
-				cout << endl << endl << "-- START:  resize(+40, 99) - ", show_lapse(false) ;
+				cout << endl << "-- START:  resize(+40, 99) - ", show_lapse(false) ;
 			flOK = varr.resize(varr.size() + 40, 99) ;
-				cout << endl << "\n---- result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+				cout << endl << "---- result: " << (flOK ? "<OK> " : "<ERROR> ") << varr ;
+
+				cout << endl << endl << "\n--- Tests on ::iterator follow: " ;
 				
-				cout << endl << endl << "-- START:  resize(-20, 77)", show_lapse(false) ;
-			flOK = varr.resize(varr.size() - 20, 77) ;
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+				it = varr.begin() ;
+				for (i = 0 , it = (varr.begin() + num) ; it != varr.end() ; i++, it += 1)   { // it++)   {   // ++it) {
+					// if (i % ElementsPerRow == 0)    cout << '\n' ;
+					// cout << std::setw(SpacePerElement) , cout << 
+					(*it = varr.size() - i) ;   // *it = ... does not compile as well as *(ra_it = it) = ... does not compile
+				}
+				cout << endl << "--- end of *() = : setting [begin() + num(10), size) to (size - i). Result: " << endl ;
+				for (it = varr.begin() ; it != varr.endlim() ; it += 1)   {   // ++it) {
+					if (i++ % ElementsPerRow == 0)    cout << '\n' ;
+					cout << std::setw(SpacePerElement) << (*it) ;
+				}
+				cout << endl << "--- and, now -- skip 'not-used 'num(10)'' via (endlim() - 1 - num) and, BACK through --:" ;
+				for ((it = varr.endlim() - 1 - num) ; it >= varr.begin() ; --it)   {   // it -= 1)   {   // --it)   {    // it--) {
+					if (i++ % ElementsPerRow == 0)    cout << '\n' ;
+					cout << std::setw(SpacePerElement) << (*it) ;
+				}
 
-				cout << endl << endl << "-- START:  resize(0)", show_lapse(false) ;
-			flOK = varr.resize(0) ;
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  resize(40, 88)", show_lapse(false) ;
-			flOK = varr.resize(40, 88) ;
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  pushing (temp=55) (20 + 10) times", show_lapse(false) ;
-			for (size_t i = 0 ; i < 30 ; i++)    { if (!(flOK = varr.push_back(temp = 55)))  { cout << endl << "--- failed push #" << i ; break ; }}
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  pushing (i) until size() < capacity()", show_lapse(false) ;	
-			for (size_t i = 0 ; varr.size() < varr.capacity() ; i++) { if (!(flOK = varr.push_back(i))) { cout << endl << "--- failed push #" << i ; break ; } }
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  pushing varr.back() into va1", show_lapse(false) ;
-			{ // introduce 'va1'
-			VArray<int>		va1(0, 0, varr.size()) ;
-			for (size_t i = 0 ; !(varr.empty()) ; i++) { 
-				if (!(flOK = va1.push_back(varr.back()))) { cout << endl << "--- failed push #" << i ; break ; } 
-				// cout << "(" << i << ", " << varr.back() << "} " ; 
-				varr.pop_back() ;
-			}
-				cout << endl << "\n----  result(varr): " << varr ;
-				cout << endl << "\n----  result(va1): " << (flOK ? "<OK>> " : "<ERROR>> ") << va1 ;
-				cout << endl << "\n-- START: clear() va1" ;
-			va1.clear() ;
-				cout << endl << "\n----  result(va1): " << va1 ;
-
-				cout << endl << "\n-- START: va1-> shrink_to_fit()" ;
-			va1.shrink_to_fit() ;
-				cout << endl << "\n----  result(va1): " << va1 ;
-			} // end 'va1'
-
-				cout << endl << endl << "-- START:  'varr' -> reserve(50)", show_lapse(false) ;
-			flOK = varr.reserve(50) ;
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  pushing (i) until size() < capacity() / 2", show_lapse(false) ;
-			for (size_t i = 0 ; varr.size() < (varr.capacity() / 2) ; i++) { if (!(flOK = varr.push_back(i))) { cout << endl << "--- failed push #" << i ; break ; } }
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  resize(30, 88)", show_lapse(false) ;
-			flOK = varr.resize(30, 88) ;
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  resize(50, 88)", show_lapse(false) ;
-			flOK = varr.resize(50, 88) ;
-				cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
-
-				cout << endl << endl << "-- START:  shrink_to_fit()", show_lapse(false) ;
-			varr.shrink_to_fit() ;
-				cout << endl << "\n----  result: " << varr ;
-
-			{ // StOS 'va_const'
-				cout << endl << endl << "\n-- START: va_const(varr)" ;
-			const VArray<int>	va_const(varr) ;
-				cout << endl << "\n----  result 'va_const': " << va_const ;
-
-				cout << endl << "\n-- START: testing operator[] on va_const" ;
-			for (size_t i = 0 ; i < va_const.size() ; i++)     {
-				if (i % ElementsPerRow == 0)			cout << endl ;
-				cout << std::setw(SpacePerElement) << (va_const[i]) ;  // ERROR: va_const[i] = i 
-				// if (i == 30)	cout << endl << "--- at(30) -->> va_const[size()]: " << va_const[va_const.size()] << endl ;
-			}
-			} // EOS 'va_const;
-
-			{ // StOS 'va1'
-				cout << endl << endl << "\n-- START: va1(varr)" ;
-			VArray<int>	va1(varr) ;
-				cout << endl << "\n----  result 'va1': " << va1 ;
-
-				cout << endl << "\n-- START: testing operator[] on va1: change va1[i] to (size() - i)" ;
-			for (size_t i = 0 ; i < va1.size() ; i++) {
-				if (i % ElementsPerRow == 0)			cout << endl ;
-				cout << std::setw(SpacePerElement) << (va1[i] = (va1.size() - i)) ;  // OK: va1[i] = i
-				// if (i == 30)	cout << endl << "--- at(30) -->> va1[size()]: " << va1[va1.size()] << endl ;
-			}
-				cout << endl << "\n----  result 'va1': " << va1 ;
-			} // EOS 'va1'
-		}   // CLose TESTING Block Scope
+				cout << endl << endl << "-- varr is: " << varr << endl ;
+				cout << endl << "-- show the last num(10) in reverse order" ;
+				i = 0 ;
+				for (it = varr.endlim() - (varr.capacity() - varr.size()) - 1 ; it >= varr.begin() + (varr.size() - num) ; --it) {
+					if (i++ % ElementsPerRow == 0)    cout << '\n' ;
+					cout << std::setw(SpacePerElement) << (*it) ;
+				}
+				cout << endl << endl << "-------------------- end of iterator tests";
+		}
 		// Limit of the TESTING Block
 
 		cout << endl << endl << endl << endl << "-- end of try block - ", show_lapse(false) ;
@@ -229,4 +179,129 @@ show_lapse(const bool fl_start)  // returns the lapse (in ...) since the start (
 	cout << endl << "\n--         varr:" << varr ;
 }   // CLose TESTING Block Scope
 
+#endif
+
+#ifdef TEST2_RESERVE_RESIZE_INITLIST_PUSH_POP_ETC
+{	// Open TESTING Block Scope		::   VArray{}, reserve(), resize(), empty(), push_back(), back(), pop()		
+	bool flOK = true ;
+
+	cout << endl << "\n-- PREPARING var{}:" ;
+	VArray<int>					varr (VArray<int>{ 5, 6, 7, 8, 9, 10 }) ;
+	cout << endl << "\n---- result:" << varr ;
+
+	cout << endl << endl << "-- START:  reserve(60) - ", show_lapse(false) ;
+	flOK = varr.reserve(num_elements + 50) ;
+	cout << endl << "\n---- result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  resize(+40, 99) - ", show_lapse(false) ;
+	flOK = varr.resize(varr.size() + 40, 99) ;
+	cout << endl << "\n---- result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  resize(-20, 77)", show_lapse(false) ;
+	flOK = varr.resize(varr.size() - 20, 77) ;
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  resize(0)", show_lapse(false) ;
+	flOK = varr.resize(0) ;
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  resize(40, 88)", show_lapse(false) ;
+	flOK = varr.resize(40, 88) ;
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  pushing (temp=55) (20 + 10) times", show_lapse(false) ;
+	for (size_t i = 0 ; i < 30 ; i++) { if (!(flOK = varr.push_back(temp = 55))) { cout << endl << "--- failed push #" << i ; break ; } }
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  pushing (i) until size() < capacity()", show_lapse(false) ;
+	for (size_t i = 0 ; varr.size() < varr.capacity() ; i++) { if (!(flOK = varr.push_back(i))) { cout << endl << "--- failed push #" << i ; break ; } }
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  pushing varr.back() into va1", show_lapse(false) ;
+	{ // introduce 'va1'
+		VArray<int>		va1(0, 0, varr.size()) ;
+		for (size_t i = 0 ; !(varr.empty()) ; i++) {
+			if (!(flOK = va1.push_back(varr.back()))) { cout << endl << "--- failed push #" << i ; break ; }
+			// cout << "(" << i << ", " << varr.back() << "} " ; 
+			varr.pop_back() ;
+		}
+		cout << endl << "\n----  result(varr): " << varr ;
+		cout << endl << "\n----  result(va1): " << (flOK ? "<OK>> " : "<ERROR>> ") << va1 ;
+		cout << endl << "\n-- START: clear() va1" ;
+		va1.clear() ;
+		cout << endl << "\n----  result(va1): " << va1 ;
+
+		cout << endl << "\n-- START: va1-> shrink_to_fit()" ;
+		va1.shrink_to_fit() ;
+		cout << endl << "\n----  result(va1): " << va1 ;
+	} // end 'va1'
+
+	cout << endl << endl << "-- START:  'varr' -> reserve(50)", show_lapse(false) ;
+	flOK = varr.reserve(50) ;
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  pushing (i) until size() < capacity() / 2", show_lapse(false) ;
+	for (size_t i = 0 ; varr.size() < (varr.capacity() / 2) ; i++) { if (!(flOK = varr.push_back(i))) { cout << endl << "--- failed push #" << i ; break ; } }
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  resize(30, 88)", show_lapse(false) ;
+	flOK = varr.resize(30, 88) ;
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  resize(50, 88)", show_lapse(false) ;
+	flOK = varr.resize(50, 88) ;
+	cout << endl << "\n----  result: " << (flOK ? "<OK>> " : "<ERROR>> ") << varr ;
+
+	cout << endl << endl << "-- START:  shrink_to_fit()", show_lapse(false) ;
+	varr.shrink_to_fit() ;
+	cout << endl << "\n----  result: " << varr ;
+
+	{ // StOS 'va_const'
+		cout << endl << endl << "\n-- START: va_const(varr)" ;
+		const VArray<int>	va_const(varr) ;
+		cout << endl << "\n----  result 'va_const': " << va_const ;
+
+		cout << endl << "\n-- START: testing operator[] on va_const" ;
+		for (size_t i = 0 ; i < va_const.size() ; i++) {
+			if (i % ElementsPerRow == 0)			cout << endl ;
+			cout << std::setw(SpacePerElement) << (va_const[i]) ;  // ERROR: va_const[i] = i 
+			// if (i == 30)	cout << endl << "--- at(30) -->> va_const[size()]: " << va_const[va_const.size()] << endl ;
+		}
+	} // EOS 'va_const;
+
+	{ // StOS 'va1'
+		cout << endl << endl << "\n-- START: va1(varr)" ;
+		VArray<int>	va1(varr) ;
+		cout << endl << "\n----  result 'va1': " << va1 ;
+
+		cout << endl << "\n-- START: testing operator[] on va1: change va1[i] to (size() - i)" ;
+		for (size_t i = 0 ; i < va1.size() ; i++) {
+			if (i % ElementsPerRow == 0)			cout << endl ;
+			cout << std::setw(SpacePerElement) << (va1[i] = (va1.size() - i)) ;  // OK: va1[i] = i
+			// if (i == 30)	cout << endl << "--- at(30) -->> va1[size()]: " << va1[va1.size()] << endl ;
+		}
+		cout << endl << "\n----  result 'va1': " << va1 ;
+	} // EOS 'va1'
+		}   // CLose TESTING Block Scope
+#endif
+
+#ifdef TEST3_TEST3_ITERATORS_COMPARISONS
+{ // Comparisons for (it1 < rho)
+cout << endl << "-- begin() " << (varr.begin() < varr.end() ? "<" : ">=") << " end()" ;
+cout << endl << "-- begin() " << (varr.begin() > varr.end() ? ">" : "<=") << " end()" ;
+cout << endl << "-- begin() " << (varr.begin() >= varr.end() ? ">=" : "<") << " end()" ;
+cout << endl << "-- begin() " << (varr.begin() <= varr.end() ? "<=" : ">") << " end()" ;
+				}
+{ // Comparisons for (it1 = rho)
+	cout << endl << "-- (it = begin(), so: it " << (it > varr.begin() ? ">" : "<=") << " begin()" ;
+	cout << endl << "--                    it " << (it >= varr.begin() ? " >= " : "<") << " begin()" ;
+	cout << endl << "--                    it " << (it < varr.begin() ? "<" : ">=") << " begin()" ;
+	cout << endl << "--                    it " << (it <= varr.begin() ? "<=" : ">") << " begin()" ;
+}
+{ // Comparisons for (it > rho)
+	cout << endl << "-- (it = end() > begin(), so: it " << (it > varr.begin() ? ">" : "<=") << " begin()" ;
+	cout << endl << "--                            it " << (it >= varr.begin() ? ">=" : "<") << " begin()" ;
+	cout << endl << "--                            it " << (it < varr.begin() ? "<" : ">=") << " begin()" ;
+	cout << endl << "--                            it " << (it <= varr.begin() ? "<=" : ">") << " begin()" ;
+}
 #endif
