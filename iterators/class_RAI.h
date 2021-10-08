@@ -1,4 +1,4 @@
-// class_RAI.h: a simplified approach to RandomAccessIterators via class template <DTy> class iterator_RA
+// class_RAI.h: an approach to RandomAccessIterators via class template <DTy> class iterator_RA
 //			Support:
 //				- Constructors: default (pointer to DTy), Copy
 //				- Assignement:  Copy
@@ -6,24 +6,28 @@
 //				- increment/de: ++, --, +=, -=, -, +
 //				- dereference: *()
 // 
-// ver 0.0:
+// ver 0.0:     - iterator_RA<> 
+// ver 0.1:		- const_iterator_RA<>, also convertible from iterator_RA<>
 //
 
 
 #ifndef CLASS_RAI_CLASS_RAI_CLASS
 #define CLASS_RAI_CLASS_RAI_CLASS
 
-template <typename DTy, typename _PtrTy = DTy *, typename _RefTy = DTy &> 
+template <typename DTy> 
 class iterator_RA {
 	private:    // private:
-		_PtrTy ptr {nullptr} ;
-
+		DTy * ptr {nullptr} ;
+		using const_iterator_RA = typename iterator_RA<const DTy> ;
+		
 	public:
-		iterator_RA(_PtrTy ip = nullptr) : ptr{ip} {}
+		iterator_RA(DTy * ip = nullptr) : ptr{ip} {}
 		iterator_RA(const iterator_RA& it) : ptr{it.ptr} {}
 
 		// iterator_RA(iterator_RA&&) = delete ;
 		// iterator_RA& operator =(iterator_RA&&) = delete ;
+
+		operator const_iterator_RA () { return(ptr) ; }
 
 		virtual iterator_RA& operator =(const iterator_RA& it) { ptr = it.ptr ; return(*this) ; }
 
@@ -43,7 +47,7 @@ class iterator_RA {
 		iterator_RA         operator + (const size_t incr) const { iterator_RA tmp(*this) ; tmp.ptr += incr ; return(tmp) ; }
 		iterator_RA         operator - (const size_t decr) const { iterator_RA tmp(*this) ; tmp.ptr -= decr ; return(tmp) ; }
 
-		_RefTy	operator *() const { return(static_cast<_RefTy>(*ptr)) ; }
+		DTy&	operator *() const { return(static_cast<DTy&>(*ptr)) ; }
 
 } ; // class iterator_RA
 

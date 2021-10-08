@@ -32,6 +32,7 @@ main()
 							vector<int>			vi{1,2, 3, 4, 5, 6, 7} ;
 
 							VArray<int>::iterator   it ;
+							VArray<int>::const_iterator   cit = it ;
 
 							size_t					i {0} ;
 							size_t					num = 0 ;
@@ -60,25 +61,26 @@ main()
 				for (i = 0 , it = (varr.begin() + num) ; it != varr.end() ; i++, it += 1)   { // it++)   {   // ++it) {
 					// if (i % ElementsPerRow == 0)    cout << '\n' ;
 					// cout << std::setw(SpacePerElement) , cout << 
-					(*it = varr.size() - i) ;   // *it = ... does not compile as well as *(ra_it = it) = ... does not compile
+					(*it = varr.size() - i) ;   // *cit = ... does not compile
 				}
+				cit = it ; // it = cit ; does not compile
 				cout << endl << "--- end of *() = : setting [begin() + num(10), size) to (size - i). Result: " << endl ;
-				for (it = varr.begin() ; it != varr.endlim() ; it += 1)   {   // ++it) {
+				for (cit = varr.begin() ; cit != varr.endlim() ; cit += 1)   {   // ++it) {
 					if (i++ % ElementsPerRow == 0)    cout << '\n' ;
-					cout << std::setw(SpacePerElement) << (*it) ;
+					cout << std::setw(SpacePerElement) << (*cit) ;
 				}
 				cout << endl << "--- and, now -- skip 'not-used 'num(10)'' via (endlim() - 1 - num) and, BACK through --:" ;
-				for ((it = varr.endlim() - 1 - num) ; it >= varr.begin() ; --it)   {   // it -= 1)   {   // --it)   {    // it--) {
+				for ((cit = varr.endlim() - 1 - num) ; cit >= varr.begin() ; --cit)   {   // it -= 1)   {   // --it)   {    // it--) {
 					if (i++ % ElementsPerRow == 0)    cout << '\n' ;
-					cout << std::setw(SpacePerElement) << (*it) ;
+					cout << std::setw(SpacePerElement) << (*cit) ;
 				}
 
 				cout << endl << endl << "-- varr is: " << varr << endl ;
 				cout << endl << "-- show the last num(10) in reverse order" ;
 				i = 0 ;
-				for (it = varr.endlim() - (varr.capacity() - varr.size()) - 1 ; it >= varr.begin() + (varr.size() - num) ; --it) {
+				for (cit = varr.endlim() - (varr.capacity() - varr.size()) - 1 ; cit >= varr.begin() + (varr.size() - num) ; --cit) {
 					if (i++ % ElementsPerRow == 0)    cout << '\n' ;
-					cout << std::setw(SpacePerElement) << (*it) ;
+					cout << std::setw(SpacePerElement) << (*cit) ;
 				}
 				cout << endl << endl << "-------------------- end of iterator tests";
 		}

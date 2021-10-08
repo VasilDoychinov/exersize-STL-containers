@@ -28,8 +28,8 @@
 //    ver 0.2		- front(): ...                                                              1st ...
 //					- shrink_to_fit(): release the access storage
 //					- [const] T& operator [i] const : throws out_of_range if (i >= size())
-//    ver 0.2		- member type ::iterator -> Random Access Iterators (class iterator_RA<T> defined in "class_RAI.h")
-//
+//    ver 0.2		- member types ::iterator -> Random Access Iterators (class iterator_RA<T> defined in "class_RAI.h")
+//                                 ::const_iterator -> ...                type const_iterator_RA<T> ...
 // 
 //			struct VA_base: private member of VArray: designed for use within VArray:: only
 //				General Notes:
@@ -113,9 +113,8 @@ class VArray {
 
 	public:
 		using	iterator = typename iterator_RA<T> ;
+		using	const_iterator = typename iterator_RA<const T> ;
 
-		class iterator {} ; 
-	
 	public:
 		explicit VArray (size_t num = 0, const T& val = T(), size_t cap = 0, A a = A()) ;	// default C.
 		explicit VArray (std::initializer_list<T>, A a = A()) ;								// initializer_list C.
