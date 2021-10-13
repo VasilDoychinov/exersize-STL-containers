@@ -8,6 +8,11 @@
 //					  NB: T() should, preferably, NOT need memory releases as it will not be taken care of
 //					- ...             [0, size) are initialized after an operation with user defined value<T>
 //                    POSSIBLE Optimization for SPEED: FORGET ABOUT T() initialization except explicitly requested
+//					NB: In case the empty storage is no longer being initialized with T() functions like push_back() must be updated accordingly
+//			    NB: - the family of functions unini_*() acts on NOT INITIALIZED elements, ie NO care is taken for releasing resources
+//					- the ...                 over_*()  acts on CONSTRUCTED elements: ie resources ARE taken care of
+//					- elements [_spa, _lim) initialized are currently initialized (and maintained that way) with T() for testing purposes mostly
+//                  - Influenced funstions: all initialization, changing size, capacity, etc.
 // 
 //				Interface:
 //					- default Constructor: create VArray of size num and initialize its elements with a value, use allocator
@@ -30,6 +35,10 @@
 //					- [const] T& operator [i] const : throws out_of_range if (i >= size())
 //    ver 0.2		- member types ::iterator -> Random Access Iterators (class iterator_RA<T> defined in "class_RAI.h")
 //                                 ::const_iterator -> ...                type const_iterator_RA<T> ...
+//					- friend operator <<(): output to ostream&. For testing purposes outputs all, ie incl. the not used storage
+//    ver 0.3		- swap(& va1, & va2) ; va1.swap(& va2): swap : noexception is expected  
+//    ver 0.3		- erase(pos), erase(from, to)
+//    ver 0.3		- insert(): as in STL vector; additional insert_at(ind, from, to)
 // 
 //			struct VA_base: private member of VArray: designed for use within VArray:: only
 //				General Notes:
@@ -51,9 +60,9 @@ using std::allocator ;
 using std::cout ;
 using std::endl ;
 using std::move ;
-using std::swap ;
 using std::cerr ;
 
+#define _TEST_VARRAY_TEST      // Triggers ON initialization of empty storage with T()
 
 // struct VA_base
 
@@ -66,7 +75,7 @@ struct VA_base    {				// Acts as a memory handle for VArray
 		T*	_spa ;
 
 		explicit VA_base(A a = A(), typename A::size_type size = 0) : _all{a}, _elems{a.allocate(size)}, 
-											 _lim{_elems + size}, _spa{_elems + size} { cout << endl << "___ VA_base for " << size ; }
+											 _lim{_elems + size}, _spa{_elems} { cout << endl << "___ VA_base for " << size << " at (" << size_t(_elems) << ')'; }
 		virtual  ~VA_base() noexcept { 
 					cout << endl << "___  ~ VA_base ..." ;
 					_all.deallocate(_elems, _lim - _elems); _elems = _lim = _spa = nullptr ; 
@@ -95,7 +104,7 @@ VA_base<T, A>::operator =(VA_base&& vb) noexcept
 	cout << endl << "___ VA_base = && ..." ;
 	if (this != &vb) {
 		// -> vb aka *this is to be destroyed at the end of the scope
-		swap(_all, vb._all), swap(_elems, vb._elems), swap(_lim, vb._lim), swap(_spa, vb._spa) ;
+		std::swap(_all, vb._all), std::swap(_elems, vb._elems), std::swap(_lim, vb._lim), std::swap(_spa, vb._spa) ;
 	}
 	return(*this) ;
 } // VA_base::operator=(&&) 
@@ -107,14 +116,18 @@ VA_base<T, A>::operator =(VA_base&& vb) noexcept
 // ------------ class VArray
 template <class T, class A = allocator<T>>
 class VArray {
-	private:
-		struct VA_base<T,A>		m_base ;
-		void destroy_elements() ;
-
 	public:
 		using	iterator = typename iterator_RA<T> ;
 		using	const_iterator = typename iterator_RA<const T> ;
 
+	private:
+		struct VA_base<T,A>		m_base ;
+
+		void destroy_elements(const_iterator from, const_iterator to) ;
+		template <class InpIt, class OutIt> void unini_cpy(InpIt beg, InpIt end, OutIt ooo) ;
+		template <class InpIt, class OutIt> void unini_move(InpIt beg, InpIt end, OutIt ooo) ;
+		bool _insert_space(size_t ind, size_t num_ins) noexcept ; // Inserts space of size num_ins at [ind]: LEAVES the Object in ILLEGAL STATE
+	
 	public:
 		explicit VArray (size_t num = 0, const T& val = T(), size_t cap = 0, A a = A()) ;	// default C.
 		explicit VArray (std::initializer_list<T>, A a = A()) ;								// initializer_list C.
@@ -122,6 +135,7 @@ class VArray {
 
 		VArray(const VArray& va) ;               // Copy C.
 		VArray& operator = (const VArray& va) ;  // Copy A.
+		void swap(VArray<T,A>& va) noexcept ;
 
 		VArray(VArray&& va) noexcept : m_base {move(va.m_base)} { cout << endl << "___ VArray && ..." ; }	// Move C.
 		VArray& operator =(VArray&& va) noexcept ;															// Move A.
@@ -134,6 +148,16 @@ class VArray {
 		bool resize(size_t size, const T& val = T()) noexcept ; // Change the size, initialize with val, if needed, upto _lim
 		void clear() { resize(0) ; } 
 		void shrink_to_fit() ;
+
+		bool erase(iterator pos) noexcept		{ return(erase(pos, pos + 1)) ; }
+		bool erase(iterator from, iterator to) noexcept ;
+
+		iterator insert(iterator pos, const T& val = T()) ;
+		iterator insert(iterator pos, T&& val = T()) ;
+		iterator insert(iterator pos, size_t num, const T& val = T()) ;
+		template <class InputIterator> bool insert_at(size_t ind, InputIterator from, InputIterator to) ;
+		template <class InputIterator> bool insert   (const_iterator pos, InputIterator from, InputIterator to) ;
+
 		
 		bool push_back(const T& val) ;
 		bool push_back(T&& val) ;
@@ -149,104 +173,72 @@ class VArray {
 		iterator		end() const { return(static_cast<iterator>(m_base._spa)) ; }
 		iterator		endlim() const { return(static_cast<iterator>(m_base._lim)) ; }
 
+		template <class T, class A> friend void swap(VArray<T,A>& v1, VArray<T,A>& v2) noexcept ; 
 		template <class T, class A> friend std::ostream& operator << (std::ostream& os, const VArray& ar) ;
 }; // class VArray
 
-// ---------- class VArray
-
-template <class T, class A> void
-VArray<T, A>::destroy_elements()
-{
-	cout << "___ VArray : destroying elements" ;
-	for (T* p = m_base._elems ; p != m_base._spa ; ++p)     p->~T() ;    // Destroy the elements
-	m_base._spa = m_base._elems ;
-} // VArray::destroy_elements() 
+// Support function templates uini_*() and over_*()
 
 template <class T, class A>
-VArray<T, A>::~VArray()
-{
-	cout << endl << "___  ~ VArray - " ;
-	destroy_elements() ;
-} // VArray:: ~
-
-template <class T, class A>
-VArray<T, A>::VArray(size_t num, const T& val, size_t cap, A a) : m_base(a, (cap <= num ? (cap = num + 8) : cap))
-{
-	// in : if (capacity <= num)        cap = num + 8 ; // Magic # 8: size of space to reserve since the beginning
-	cout << endl << "___ VArray (" << num << ", " << val << ")/cap(): " << cap ;
-	try {
-		std::uninitialized_fill(m_base._elems, m_base._elems + num, val) ;    // See VS docs
-		std::uninitialized_fill(m_base._spa, m_base._lim, T()) ;  // Initialize it with the <empty>: For testing mostly
-	} catch (...) { cerr << endl << "___ VArray default: exception thrown. Cleaning done" ; throw ; }
-	m_base._spa = m_base._elems + num ;									      // _lim is just where it has to be: next spot after the end
-} // VArray:: ()
-
-template <class T, class A>
-VArray<T, A>::VArray(std::initializer_list<T> ilist, A a) : m_base(a, ilist.size())
-{
-	m_base._spa = m_base._elems ;
-	for (const auto& i : ilist)		push_back(i) ;
-} // VArray (initializer_list)
-
-
-template <typename In, typename T, typename Out> void
-uini_cpy(In beg, T* end, Out ooo)			// Expected to provide Strong guarantee; (&* is for the intended use of iterators); T()- request using Constructors
-{
-	cout << endl << "__ copying: " ;
-	In p = beg ; Out q = ooo ;    // for ERROR handling and Testing: "cout << i << ':'" as well
+template <class InpIt, class OutIt> void
+VArray<T,A>::unini_cpy(InpIt beg, InpIt end, OutIt ooo)	// Expected to provide Strong guarantee; (&* is for iterators);
+{				             							// does NOT call a Destructor for the target elements
+	
+	InpIt p = beg ; OutIt q = ooo ;    // for ERROR handling and Testing: "cout << i << ':'" as well
 	try {
 		for (; beg != end ; ++beg, ++ooo) {
 			// if (beg - p == 4)   throw (CM_error(string("__ testing CM_error"))) ;
-			cout << (beg - p) << ':',
-				new (static_cast<void *>(&*ooo)) T ( *beg ) ;
+			// cout << (beg - p) << ':',
+			new (static_cast<void *>(&*ooo)) T (*beg) ; // T ( *beg ) ;
 		}
 	} catch (...) {
 		cerr << endl << "__ exception thrown -> cleaning: " ;
 		for (size_t i = 0 ; q != ooo ; ++q, i++)	(&(*q))->~T(), cout << i << ':' ;
 		throw ;
 	}
-} // uini_cpy()
+} // unini_cpy()
 
-template <typename In, typename T, typename Out> void
-uini_move(In beg, T* end, Out ooo)			
+template <class T, class A>
+template <class InpIt, class OutIt> void
+VArray<T,A>::unini_move(InpIt beg, InpIt end, OutIt ooo)			// does NOT call a Destructor for the target elements
 {
-	cout << endl << "__ moving: " ;
-	In p = beg ; Out q = ooo ;    // for ERROR handling and Testing: "cout << i << ':'" as well
+	// cout << endl << "__ moving: " ;
+	InpIt p = beg ; OutIt q = ooo ;    // for ERROR handling and Testing: "cout << i << ':'" as well
 	try {
 		for (; beg != end ; ++beg, ++ooo) {
 			// if (beg - p == 4)   throw (CM_error(string("__ testing CM_error"))) ;
-			cout << (beg - p) << ':',
-				new (static_cast<void *>(&*ooo)) T ( move(*beg) ) ;
-			beg->~T() ;
+			// cout << (beg - p) << ':',
+			new (static_cast<void *>(&*ooo)) T (move(*beg)) ;
+			beg->~T() ;   // Just in case ...
 		}
 	} catch (...) {
 		cerr << endl << "__ exception thrown during moving: can not clean" ;
 		throw ;
 	}
-} // uini_move()
+} // unini_move()
 
-template <typename Out, typename T> void
-uini_chng(Out beg, Out end, const T& val)
+template <class OutIt, class T> void
+over_chng(OutIt beg, OutIt end, const T& val)   // Calls a destructor for the target elements
 {
 	// cout << endl << "__ changing: " ;
-	Out p = beg ;    // for ERROR handling and Testing: "cout << i << ':'" as well
+	OutIt p = beg ;    // for ERROR handling and Testing: "cout << i << ':'" as well
 	try {
 		for (; beg != end ; ++beg) {
 			// if (beg - p == 4)   throw (CM_error(string("__ testing CM_error"))) ;
 			beg->~T(),
 				// cout << (beg - p) << ':',
-				new (static_cast<void *>(&*beg)) T ( val ) ;
+				new (static_cast<void *>(&*beg)) T (val) ;
 		}
 	} catch (...) {
 		cerr << endl << "__ exception thrown during changing: can not clean" ;
 		throw ;
 	}
-} // uini_chng()
+} // over_chng()
 
 template <typename Out, typename T> void
-uini_mval(Out beg, T&& val)
+over_mval(Out beg, T&& val)					// Calls a destructor for the target elements
 {
-	cout << endl << "__ changing with &&: " ;
+	// cout << endl << "__ changing with &&: " ;
 	try {
 		beg->~T() ;
 		new (static_cast<void *>(&*beg)) T (move(val)) ;
@@ -254,14 +246,55 @@ uini_mval(Out beg, T&& val)
 		cerr << endl << "__ exception thrown during moving value: can not clean" ;
 		throw ;
 	}
-} // uini_mval()
+} // over_mval()
+
+// ---------- class VArray
+
+template <class T, class A> void
+VArray<T, A>::destroy_elements(const_iterator from, const_iterator to)
+{
+	cout << "___ VArray : destroying elements" ;
+	// for (T* p = m_base._elems ; p != m_base._spa ; ++p)     p->~T() ;    // Destroy the elements
+	// for (T* p = m_base._spa   ; p != m_base._lim ; ++p)     p->~T() ;    // Destroy the 'not used storage' as for TESTING they were set to T()
+	for ( ; from < to ; ++from)				from->~T() ;
+} // VArray::destroy_elements() 
+
+template <class T, class A>
+VArray<T, A>::~VArray()
+{
+	cout << endl << "___  ~ VArray - " ;
+	destroy_elements(m_base._elems, m_base._spa) ;			// Clean [0 : size()
+#ifdef _TEST_VARRAY_TEST
+	destroy_elements(m_base._spa, m_base._lim) ;            // Clean the initialized and not used storage
+#endif
+	m_base._spa = m_base._elems ;
+} // VArray:: ~
+
+template <class T, class A>
+VArray<T, A>::VArray(size_t num, const T& val, size_t cap, A a) : m_base(a, (cap < num ? (cap = num + 8) : cap))
+{
+	cout << endl << "___ VArray (" << num << ", " << val << ")/cap(): " << cap ;
+	try {
+		std::uninitialized_fill(m_base._elems, m_base._elems + num, val) ;  // See VS docs
+		std::uninitialized_fill(m_base._elems + num, m_base._lim, T()) ;	// Initialize rest of the storage with the <empty>: For testing mostly
+	} catch (...) { cerr << endl << "___ VArray default: exception thrown. Cleaning done" ; throw ; }
+	m_base._spa = m_base._elems + num ;									      // _lim is just where it has to be: next spot after the end
+} // VArray:: ()
+
+template <class T, class A>
+VArray<T, A>::VArray(std::initializer_list<T> ilist, A a) : m_base(a, ilist.size())
+{
+	cout << endl << "___ VArray {}/cap(): " << ilist.size() ;
+	unini_cpy(ilist.begin(), (ilist.end()), m_base._elems) ;     // Does NOT call a destructor for the target
+	m_base._spa = m_base._elems + ilist.size() ; // _lim is already set 
+} // VArray (initializer_list)
 
 template <class T, class A>
 VArray<T, A>::VArray(const VArray& var) : m_base(var.m_base._all, var.capacity())
 {
 	cout << endl << "___ VArray & ..." ;
 	m_base._spa = m_base._elems + var.size() ;
-	uini_cpy(var.m_base._elems, var.m_base._lim, m_base._elems) ; // Copy all of them - up to the limit: fully identical
+	unini_cpy(var.m_base._elems, var.m_base._lim, m_base._elems) ; // Copy all of them - up to the limit: fully identical
 } // VArray (&)
 
 
@@ -288,7 +321,6 @@ VArray<T, A>::operator =(VArray&& var) noexcept
 } // VArray operator =(&&)
 
 
-
 template <class T, class A> bool
 VArray<T, A>::reserve(size_t new_cap) noexcept
 {
@@ -306,9 +338,9 @@ VArray<T, A>::reserve(size_t new_cap) noexcept
 		VA_base<T, A>		tb(m_base._all, new_cap) ;
 		tb._spa = tb._elems + size() ;       // Adjust to match this->size(); Then initialize to _lim
 		std::uninitialized_fill(tb._spa, tb._lim, T()) ; // In case of an eception, Nothing has been damaged so far
-		uini_move(m_base._elems, m_base._spa, tb._elems) ; // Now, it is what it is
+		unini_move(m_base._elems, m_base._spa, tb._elems) ; // Now, it is what it is
 		// Only need to swap (The allocator has to be the same); 'tb' must be destroyed at EOS
-		swap(m_base._elems, tb._elems) , swap(m_base._spa, tb._spa) , swap(m_base._lim, tb._lim) ;
+		std::swap(m_base._elems, tb._elems) , std::swap(m_base._spa, tb._spa) , std::swap(m_base._lim, tb._lim) ;
 	} catch (...) {
 		cerr << endl << "___ (VArray): reserve() -> exception -> ..." ;
 		return(false) ;
@@ -328,7 +360,7 @@ VArray<T, A>::resize (size_t ns, const T& val) noexcept
 	// Now _lim and _elems are, hopefully, where they should be
 	try {
 		if (ns < arr_size) {   // need to destroy some and set them to T() - the rest are expected to be T()
-			uini_chng(m_base._elems + ns, m_base._spa, T{}) ; 
+			over_chng(m_base._elems + ns, m_base._spa, T()) ; 
 			m_base._spa = m_base._elems + ns ;                
 		} else if (ns > size()) {
 			std::uninitialized_fill(m_base._spa, m_base._elems + ns, val) , m_base._spa = m_base._elems + ns ;
@@ -346,14 +378,135 @@ VArray<T, A>::shrink_to_fit()
 {
 	VA_base<T,A>	tb(m_base._all, size()) ;
 	try {
-		uini_move(m_base._elems, m_base._spa, tb._elems) ;  // should take care of destruction of source elements
+		unini_move(m_base._elems, m_base._spa, tb._elems) ;  // should take care of destruction of source elements
+		tb._spa = tb._elems + size() ; // (m_base._spa - m_base._elems) ;
 		// -> tb aka *this is to be destroyed at the end of the scope
-		swap(m_base._elems, tb._elems), swap(m_base._lim, tb._lim), swap(m_base._spa, tb._spa) ;
+		std::swap(m_base._elems, tb._elems), std::swap(m_base._lim, tb._lim), std::swap(m_base._spa, tb._spa) ;
 	} catch (...) {
 		cerr << endl << "___ (VArray): shrink_to_fit -> exception -> ..." ;
 	}
 } // VArray shrink_to_fit()
 
+template <class T, class A> bool
+VArray<T, A>::erase(iterator from, iterator to) noexcept		// T's MOVE operations must comply with the standard
+{		
+					auto lim = end() ;
+	// Do NOT allow parameters outside limits
+	if (from >= to || from < begin() || from >= end() || to > end() || to <= begin())      return(false) ;
+	
+	for ( ; to < lim ; ++to, ++from)      {  // *from = move(*to) ;  // MOVE operations must NOT throw. So does resize()
+		(&(*from))->~T() ,
+		new (static_cast<void *>(&*from)) T(move(*to)) ;   // *from = move(*to) will strongly depend on T operations
+	}
+	return(resize(size() - (lim - from))) ;   // Should clean all remaining, if any, and do the necessary initialization
+} // VArray erase()
+
+template <class T, class A> bool
+VArray<T, A>::_insert_space(size_t ind, size_t num_ins)  noexcept // move() should NOT throw; LEAVES the Object in ILLEGAL STATE
+{
+	size_t   nel = size() ;  // Here we assume that 'ind' is OK: in [0, size()] and 'num_ins' > 0
+	// if (ind > nel)           return(false) ;
+
+	// size_t   num_ins = (to - from) ; // for (auto p = from ; p != to ; ++p, num_ins++) ;    
+	cout << endl << endl << "___  (insert space): " << num_ins << " elements at [" << ind << "] of {used " << nel << " of " << capacity() << "}" ;
+
+	if (nel + num_ins > capacity())		{ 
+		if (!reserve(nel + num_ins))   return(false) ; 
+		cout << endl << "___ capacity changed to: " << capacity() ;
+	}
+
+	iterator   st = (end()) ;
+	iterator   last = st + num_ins ;
+
+#ifdef _TEST_VARRAY_TEST
+	// We are to: either move elements to empty storage or, appending. So, Destroy the initialized elements in the not-used storage
+	destroy_elements(st, last) ;      // [0 : _lim)
+	cout << endl << "___ " << num_ins << " elements in the empty storage cleared" ;
+#endif
+	try {
+		if (ind < nel) {   // Free space for num_ins elements starting at ind, ie move backwards (nel-ind)s from [nel-1] to [nel+num_ins-1]
+			--st, --last ;        // To positions
+			cout << endl << "___ moving backwards: " << (nel - ind) << " from " << (st - begin()) << " to " << (last - begin()) ;
+
+			for (auto i = nel - ind ; i > 0 ; i--, --st, --last) {    // Reverse move to free the space
+				new (static_cast<void *>(&*last)) T (move(*st)) ;
+				st->~T() ; // Just in case
+			}
+		} else {   // Append: ie insert into the free storage
+			cout << endl << "___ to append: " << num_ins << " at " << nel ;
+		}
+	} catch (exception& e) { 
+		cerr << endl << "___ (varray)->_insert_space: STL exception: " << e.what() 
+				<< " of Type: " << typeid(e).name() ;
+		return(false) ;
+	} catch (...) { cerr << endl << "___ (varray)->_insert_space: unknown exception" ; return(false) ; }
+	return(true) ;
+} // VArray _isert_space()
+
+template <class T, class A> iterator_RA<T>
+VArray<T, A>::insert(iterator_RA<T> pos, const T& val)
+{
+	return(insert(pos, 1, val)) ;
+} // VArray insert( T& )
+
+template <class T, class A> iterator_RA<T>
+VArray<T, A>::insert(iterator_RA<T> pos, T&& val)
+{
+	if (pos < begin() || pos > end())   return(end() + 1) ;   // indicate failure
+	size_t   ind = pos - begin() ;
+	if (_insert_space(ind, 1))		{			cout << endl << "___ inserting &&: at position " << ind ;
+		iterator   st = begin() + ind ;
+		try {
+			new (static_cast<void *>(&*st))  T(move( val)) ;  // All object have to be destroyed by _insert_space
+		} catch (...) { cerr << endl << "___ (varray)-> insert (&&) exception in new (move): (re-thrown)" ; throw ; }
+		m_base._spa++ ;
+		return(st) ;
+	}
+	return(end() + 1) ;    // indicate failure
+} // VArray insert(&&)
+
+template <class T, class A> iterator_RA<T>
+VArray<T, A>::insert(iterator_RA<T> pos, size_t num_ins, const T& val)
+{
+	if (pos < begin() || pos > end() || num_ins == 0)   return(end() + 1) ;    // indicate failure
+
+	size_t   ind = pos - begin() ;
+	if (_insert_space(ind, num_ins))   {		cout << endl << "___ filling: " << num_ins << " from position " << ind << " onwards" ;
+		m_base._spa += num_ins ;   // there is the array with a hole in it
+		try {
+			std::uninitialized_fill(m_base._elems + ind, m_base._elems + ind + num_ins, val) ;  // All object have to be destroyed by _insert_space
+		} catch (...) { cerr << endl << "___ (varray)-> exception in uninitialized_fill(): (re-thrown)" ; throw ; }
+		return(begin() + ind) ;
+	}
+	return(end() + 1) ;    // indicate failure
+} // VArray insert(count)
+
+
+template <class T, class A>
+template <class InputIterator> bool
+VArray<T, A>::insert_at(size_t ind, InputIterator from, InputIterator to)
+{
+	size_t   nel = size() ;
+	if (ind > nel || from >= to)           return(false) ;
+
+	size_t   num_ins = (to - from) ;
+	if (_insert_space(ind, num_ins)) {   // Copy the input into the inserted space that starts at [ind]
+		cout << "___ copying: " << num_ins << " from position " << ind << " onwards" ;
+		try {
+			unini_cpy(from, to, begin() + ind) ;
+		} catch (...) { cerr << endl << "___ (varray)-> exception in unini_cpy(): (re-thrown)" ; throw ; }
+		m_base._spa += num_ins ;
+		return(true) ;
+	}
+	return(false) ;
+} // VArray insert_at()
+
+template <class T, class A>
+template <class InputIterator> bool
+VArray<T, A>::insert(const_iterator pos,  InputIterator from, InputIterator to)
+{
+	return(insert_at(pos - begin(), from, to)) ;
+} // VArray insert()
 
 template <class T, class A> bool
 VArray<T,A>::push_back(const T& val)
@@ -363,7 +516,7 @@ VArray<T,A>::push_back(const T& val)
 	if (size() == capacity())		{ if (!reserve(arr_size ? arr_size * 2 : 8))    return(false) ; }
 
 	try {
-	uini_chng(m_base._spa, m_base._spa + 1, val) ;
+	over_chng(m_base._spa, m_base._spa + 1, val) ;
 	} catch (...)   {  
 		cerr << endl << "___ (VArray): push_back(&) -> exception -> ..." ;
 		// The only discrepancy is that *_spa might not be {}
@@ -381,7 +534,7 @@ VArray<T, A>::push_back(T&& val)
 	if (arr_size == capacity()) { if (!reserve(arr_size ? arr_size * 2 : 8))    return(false) ; }
 
 	try {
-		uini_mval(m_base._spa, move(val)) ;
+		over_mval(m_base._spa, move(val)) ;
 	} catch (...) {
 		cerr << endl << "___ (VArray): push_back(&&) -> exception -> ..." ;
 		// The only discrepancy is that *_spa might not be {}
@@ -394,9 +547,13 @@ VArray<T, A>::push_back(T&& val)
 template <class T, class A> bool
 VArray<T, A>::pop_back()
 {
-	if (empty())    return(true) ;    // Logic is: did nothing but there is no element anyway
+	if (empty())    return(false) ;    // Logic is: did not remove/change anything
 	try {
-		uini_mval(m_base._spa - 1, move(T {})) ;
+#ifdef _TEST_VARRAY_TEST
+		over_mval(m_base._spa - 1, move(T ())) ;
+#else
+		(m_base._spa - 1)->~T() ;
+#endif
 	} catch (...) {
 		cerr << endl << "__ (VArray): pop_back() -> exception -> ..." ;
 		throw ;
@@ -408,13 +565,13 @@ VArray<T, A>::pop_back()
 template <class T, class A> T
 VArray<T, A>::back() const noexcept
 {
-	return(empty() ? T{} : *(m_base._spa - 1)) ;	
+	return(empty() ? T() : *(m_base._spa - 1)) ;	
 } // Varray back()
 
 template <class T, class A> T
 VArray<T, A>::front() const noexcept
 {
-	return(empty() ? T {} : *(m_base._elems)) ;
+	return(empty() ? T () : *(m_base._elems)) ;
 } // Varray front()
 
 
@@ -433,9 +590,30 @@ VArray<T, A>::operator [](const size_t i) const
 } // Varray operator[]()
 
 
+template <class T, class A> inline void
+VArray<T, A>::swap(VArray& v2) noexcept
+{
+	cout << endl << "varray:: v1.swap(v2)" ;
+	// VA_base<T, A> temp(move(this->m_base)) ; this->m_base = move(v2.m_base) ; v2.m_base = move(temp) ;
+	VA_base<T, A> * p2 = &(v2.m_base) ;
+	std::swap(m_base._all, p2->_all), std::swap(m_base._elems, p2->_elems),
+	std::swap(m_base._spa, p2->_spa), std::swap(m_base._lim, p2->_lim) ;
+} // VArray swap()
+
 // FRIENDS follow
+template <class T, class A> inline void
+swap(VArray<T, A>& v1, VArray<T, A>& v2) noexcept
+{
+	cout << endl << "varray:: swap(v1, v2)" ;
+	// VA_base<T,A> temp(move(v1.m_base)) ; v1.m_base = move(v2.m_base) , v2.m_base = move(temp) ;
+	VA_base<T,A> * p1 = &(v1.m_base) ;
+	VA_base<T,A> * p2 = &(v2.m_base) ;
+	std::swap(p1->_all, p2->_all) , std::swap(p1->_elems, p2->_elems) , 
+	std::swap(p1->_spa, p2->_spa) , std::swap(p1->_lim, p2->_lim) ;
+} // friend VArray swap()
+
 constexpr int ElementsPerRow { 10 } ;     // For the output: ostream:
-constexpr int SpacePerElement { 10 } ;    // ... # of ' '
+constexpr int SpacePerElement { 6 } ;    // ... # of ' '
 
 template <class T, class A> std::ostream&
 operator << (std::ostream& os, const VArray<T, A> & ar)
@@ -443,18 +621,60 @@ operator << (std::ostream& os, const VArray<T, A> & ar)
 	os << "  {used " << ar.size() << " of " << ar.capacity() << '}' << '\n' ;
 	if (ar.size() == 0) { os << "<EMPTY>\n" ; /* return(os) ; */ }
 
-	size_t i = 0 ; // std::string str{} ;
+	// std::string str(typeid(ar.begin()).name()) ; 
+	// os << endl << "___ start at (" << size_t(ar.begin()) << ')' << " of type {" << str << "}" ;
+	size_t i = 0 ;
 	for (auto p = ar.begin() ; p != ar.endlim() ; ++p) {
-		// str = typeid(p).name() ;
 		if (i++ % ElementsPerRow == 0)    os << '\n' ;
-		os << std::setw(SpacePerElement) << (*p) ; // = -1 ); // << (ar.m_base._elems)[i] ; // << '\t' ;
+		os << std::setw(SpacePerElement) << (*p) << ':' << std::setw(2) << i ; // = -1 ); // << (ar.m_base._elems)[i] ; // << '\t' ;
 	}
-	// cout << endl << "-- typeid iterator {" << str << "}" ;
+	// os << endl << "-- typeid iterator {" << str << "}" ;
+	os << endl << "-------------------------------" ;
 	return(os) ;
 } // friend VArray<T,A>::operator << ()
 
 // eoclass VArray
 
+#undef _TEST_VARRAY_TEST
+
 #endif // OWN_ARRAY_OWN_ARRAY_OWN
 
 // eof vArray.h
+
+/* insert_at
+	size_t   num_ins = (to - from) ; // for (auto p = from ; p != to ; ++p, num_ins++) ;
+	cout << endl << endl << "___  (insert): " << num_ins << " elements at [" << ind << "] of {used " << size() << " of " << capacity() << "}" ;
+
+	if (nel + num_ins > capacity())			{ if (!reserve(nel + num_ins))      return(false) ; }
+	cout << endl << "___ capacity changed to: " << capacity() ;
+
+	iterator   st = (end()) ;
+	iterator   last = st + num_ins ;
+
+#ifdef _TEST_VARRAY_TEST
+	// We are to: either move elements to empty storage or, appending. So, Destroy the initialized elements in the not-used storage
+	destroy_elements(st, last) ;      // [0 : _lim)
+	cout << endl << "___ " << num_ins << " elements in the empty storage cleared" ;
+#endif
+
+	try {
+		if (ind < nel)   {   // Free space for num_ins elements starting at ind, ie move backwards (nel-ind)s from [nel-1] to [nel+num_ins-1]
+			--st, --last ;        // To positions
+			cout << endl << "___ moving backwards: " << (nel - ind) << " from " << (st - begin()) << " to " << (last - begin()) ;
+
+			for (auto i = nel - ind ; i > 0 ; i--, --st, --last) {    // Reverse move to free the space
+				new (static_cast<void *>(&*last)) T (move(*st)) ;
+				st->~T() ; // Just in case
+			}
+		} else {   // Append: ie insert into the free storage
+			cout << endl << "___ to append: " << num_ins << " at " << nel ;
+		}
+		cout << "___ copying: " << (to - from) << " from position " << ind << " onwards" ;
+		unini_cpy(from, to, begin() + ind) ;
+		m_base._spa += num_ins ;
+	} catch (...) {
+		cerr << endl << "___ (VArray): insert" ;
+		throw ;
+	}
+	return(true) ;
+*/
